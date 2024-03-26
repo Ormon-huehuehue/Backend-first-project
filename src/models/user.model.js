@@ -3,15 +3,6 @@ import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
 
 const userSchema = new Schema({
-    name:{
-        type:String,
-        required:true,
-        unique:true,
-        lowercase:true,
-        trim:true,
-        index:true,
-
-    },
     email:{
         type:String,
         required:true,
@@ -50,9 +41,10 @@ const userSchema = new Schema({
 
 //pre is a middleware
 userSchema.pre("save",async function (next){  //dont use arrow functions in these middlewares
-    //arrow functions don't have the this reference
+    //arrow functions don't have the 'this' reference
+
     if(!this.isModified("password")){ return next();} 
-    this.password = bcrypt.hash(this.password,10);
+    this.password = await bcrypt.hash(this.password,10);
     next();
     
 })
