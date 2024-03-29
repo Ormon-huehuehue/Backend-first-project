@@ -10,7 +10,7 @@ const userSchema = new Schema({
         lowercase:true,
         trim:true,
     },
-    fullName:{
+    username:{
         type:String,
         required:true,
         trim:true,
@@ -53,15 +53,15 @@ userSchema.pre("save",async function (next){  //dont use arrow functions in thes
 //schema.methods is used to define instance methods
 userSchema.methods.isPasswordCorrect = async function(password){
     return await bcrypt.compare(password,this.password)
+
 }
 
 userSchema.methods.generateAccessToken = function(){
-    jwt.sign(
+   const token = jwt.sign(
     {
         _id:this._id,
         email:this.email,
         username:this.username,
-        fullName:this.fullName
     },
 
     process.env.ACCESS_TOKEN_SECRET,
@@ -69,24 +69,23 @@ userSchema.methods.generateAccessToken = function(){
         expiresIn:process.env.ACCESS_TOKEN_EXPIRY
     }
 )
+ return token; 
 }
 
 userSchema.methods.generateRefreshToken = function(){
-    jwt.sign(
+    const refreshToken = jwt.sign(
     {
-        _id:this._id,
-        email:this.email,
-        username:this.username,
-        fullName:this.fullName
+        _id:this._id
     },
 
     process.env.REFRESH_TOKEN_SECRET,
     {
         expiresIn:process.env.REFRESH_TOKEN_EXPIRY
     }
-)
+
+    )
+return refreshToken
+
 }
-
-
 
 export const User = mongoose.model("User",userSchema);
