@@ -3,6 +3,7 @@ import {User} from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken"
+import mongoose from "mongoose";
 
 //defining a method to generate tokens so that it can be used later during the login process
 const generateAccessAndRefreshTokens = async(userId)=>{
@@ -198,14 +199,14 @@ const logoutUser= asyncHandler(async(req,res)=>{
 
 //refreshing the Access token using refresh token
 const refreshAccessToken = asyncHandler(async(req,res,next)=>{
-    const incomingRefreshToken = req.cookie.refreshToken || req.body.refreshToken
-
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body.refreshToken
     if(!incomingRefreshToken){
         throw new ApiResponse(401,{incomingRefreshToken},"Unauthorized request")
     }
 
     try {
-        const decodedToken = jwt.verify(incomingRefreshToken,REFRESH_TOKEN_SECRET)
+        const decodedToken = jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET)
+        console.log(decodedToken)
     
         const user = User.findById(decodedToken?._id);
         if(!user){
@@ -214,11 +215,11 @@ const refreshAccessToken = asyncHandler(async(req,res,next)=>{
             })
         }
     
-        if(incomingRefreshToken !== user?.refreshToken){
-            return res.status(401).json({
-                message:"Refresh token is expired or used"
-            })
-        }
+        // if(decodedToken !== user?.refreshToken){
+        //     return res.status(401).json({
+        //         message:"Refresh token is expired or used"
+        //     })
+        // }
     
         const options = {
             httpOnly : true,
@@ -229,17 +230,18 @@ const refreshAccessToken = asyncHandler(async(req,res,next)=>{
     
         return res.status(200)
         .cookie("accessToken",accessToken,options)
-        .cookie("RefreshToken",newRefreshToken,options)
+        .cookie("refreshToken",newRefreshToken,options)
         .json(
             new ApiResponse(200,
-                {accessToken,refreshToken: newRefreshToken},
+                {accessToken:accessToken,refreshToken: newRefreshToken},
                 {message:"Access token refreshed"}
-    
                 )
     
         )
     } catch (error) {
-        throw new error
+        res.json(
+            {error}
+        )
     }
     
 })  
@@ -373,6 +375,7 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
         }
     ])
 
+    console.log(channel)
     if(!channel?.length){
         res.status(400).json({
             message:"Channel doesn't exist"
