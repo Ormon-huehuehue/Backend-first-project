@@ -383,5 +383,55 @@ const getUserChannelProfile = asyncHandler(async(req,res)=>{
 
 })
 
+const getWatchHistory = asyncHandler(async(req,res)=>{
+    const user = await User.aggregate([
+        {
+            $match:{
+                //_id :req.user._id
+                //we didn't use the line of code above cuz aggregation pipelines don't filter out the actual objectId out of '_id' unlike mongoose in which we can directly pass the 'req.user._id' argument
 
-export {registerUser, loginUser, logoutUser,refreshAccessToken,getCurrentUser,changeCurrentPassword,updateUserAvatar,getUserChannelProfile}
+                _id:  new mongoose.Types.ObjectId(req.user._id)
+            }
+        },
+        {
+            $lookup:{
+                from:"videos",
+                localField:"watchHistory",
+                foreignField:"_id",
+                as:"watchHistory",
+                //subpipeline below
+                pipeline:[
+                    {
+                        $lookup:{
+                            from:"users",
+                            localField:"owner",
+                            foreignField:"_id",
+                            as:"owner",
+                            pipeline:[
+                                {
+                                    $project:{
+                                        username:1,
+                                        avatar:1
+                                    }
+                                },
+                                {
+                                    $addFields:{
+                                        owner:{
+                                            $first:"$owner"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    return res.status(200)
+    .json(new ApiResponse(200,user[0].getWatchHistory,"Watch history has been successfully fetched"))
+})
+
+
+export {registerUser, loginUser, logoutUser,refreshAccessToken,getCurrentUser,changeCurrentPassword,updateUserAvatar,getUserChannelProfile,getWatchHistory}
