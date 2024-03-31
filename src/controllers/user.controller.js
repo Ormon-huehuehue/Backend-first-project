@@ -12,6 +12,7 @@ const generateAccessAndRefreshTokens = async(userId)=>{
         const accessToken = user.generateAccessToken();
         const refreshToken = user.generateRefreshToken();
 
+        //refresh tokens are saved in database unlike access tokens
         user.refreshToken = refreshToken 
 
         //validateBeforeSave is used to skip the presence of certain field set to "required:true" while defining the mongoose models
@@ -171,7 +172,7 @@ const loginUser = asyncHandler(async (req,res)=>{
     .json( new ApiResponse( //ApiResponse(statusCode,data,message)
         200,
         {
-            loggedInUser:loggedInUser,refreshToken,accessToken
+            loggedInUser:loggedInUser
         },
         "user logged in successfully"
     ))
@@ -208,13 +209,13 @@ const refreshAccessToken = asyncHandler(async(req,res,next)=>{
     
         const user = User.findById(decodedToken?._id);
         if(!user){
-            res.status(401).json({
+            return res.status(401).json({
                 message:"invalid refresh token"
             })
         }
     
         if(incomingRefreshToken !== user?.refreshToken){
-            res.status(401).json({
+            return res.status(401).json({
                 message:"Refresh token is expired or used"
             })
         }
@@ -250,12 +251,12 @@ const changeCurrentPassword = asyncHandler(async(req,res,next)=>{
     //req.user already has the user stored in since the user is already logged in
     //req.user = user (auth.middleware.js)
 
-    const user = User.findById(req.user._id);
+    const user = await User.findById(req.user._id)
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
 
     if(!isPasswordCorrect){
         res.status(400).json({
-            message:"Invalid old passwords"
+            message:"Invalid old password"
         })
     }
     user.password = newPassword;
@@ -304,5 +305,83 @@ const updateUserAvatar = asyncHandler(async(req,res,next)=>{
 
 })  
 
+const getUserChannelProfile = asyncHandler(async(req,res)=>{
+    const {username} = req.params;
+    if(!username?.trim()){
+        return res.status(400).json({
+            message:"Username is missing"
+        })
+    }
 
-export {registerUser, loginUser, logoutUser,refreshAccessToken,getCurrentUser,changeCurrentPassword,updateUserAvatar}
+    //using mongodb aggregation pipelines
+    const channel = await  User.aggregate([
+        {
+            $match:{
+                username: username.toLowerCase()
+            }
+        },
+        {
+            $lookup:{
+                from:"subscriptions" ,//collection
+                //'Subscription' schema model is stored in database as 'subscriptions'
+                localField:"_id",
+                foreignField:"channel",
+                as:"subscribers"
+                //we calculate the number of channels in documents/database to lookup the number of subscribers a channel(user) has
+            }
+        },
+        {
+            $lookup:{
+                from:"subscriptions" ,
+                localField:"_id",
+                foreignField:"subscriber",
+                as:"subscribedTo"
+                //we calculate the number of subscribers in documents/database to lookup the number of channels a user(channel) is subscribed to
+            }
+        },
+        {
+            $addFields:{
+                subscriberCount : {
+                    $size : "$subscribers" // '$' means that subscribers is a field
+                },
+                channelsSubscribedTo : {
+                    $size: "$subscribedTo"
+                },
+                isSubscribed :{
+                    $cond:{
+                        if: {$in : [req.user?._id, "$subscribers.subscriber"]},
+                        then:true,
+                        else:false
+                    }
+                }
+                
+            }
+        },
+        {
+            $project : { 
+                //turn on flags of values to be shown/projected using 1
+                username : 1,
+                subscriberCount:1,
+                channelsSubscribedTo:1,
+                isSubscribed:1,
+                avatar:1,
+                coverImage:1,
+                email:1
+
+
+            }
+        }
+    ])
+
+    if(!channel?.length){
+        res.status(400).json({
+            message:"Channel doesn't exist"
+        })
+    }
+    return res.status(200)
+    .json( new ApiResponse(200,channel[0],"User channel fetched successfully"))
+
+})
+
+
+export {registerUser, loginUser, logoutUser,refreshAccessToken,getCurrentUser,changeCurrentPassword,updateUserAvatar,getUserChannelProfile}
